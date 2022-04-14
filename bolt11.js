@@ -57,13 +57,14 @@ const TAGCODES = {
   payment_hash: 1,
   payment_secret: 16,
   description: 13,
-  payee_node_key: 19,
-  purpose_commit_hash: 23, // commit to longer descriptions (like a website)
-  expire_time: 6, // default: 3600 (1 hour)
+  payee: 19,
+  description_hash: 23, // commit to longer descriptions (used by lnurl-pay)
+  expiry: 6, // default: 3600 (1 hour)
   min_final_cltv_expiry: 24, // default: 9
   fallback_address: 9,
-  routing_info: 3, // for extra routing info (private etc.)
-  feature_bits: 5
+  route_hint: 3, // for extra routing info (private etc.)
+  feature_bits: 5,
+  metadata: 27
 }
 
 // reverse the keys and values of TAGCODES and insert into TAGNAMES
@@ -80,13 +81,12 @@ const TAGPARSERS = {
   13: words => wordsToBuffer(words, true).toString('utf8'), // string variable length
   19: words => wordsToBuffer(words, true).toString('hex'), // 264 bits
   23: words => wordsToBuffer(words, true).toString('hex'), // 256 bits
+  27: words => wordsToBuffer(words, true).toString('hex'), // variable
   6: wordsToIntBE, // default: 3600 (1 hour)
   24: wordsToIntBE, // default: 9
   3: routingInfoParser, // for extra routing info (private etc.)
   5: featureBitsParser // keep feature bits as array of 5 bit words
 }
-
-const unknownTagName = 'unknownTag'
 
 function getUnknownParser(tagCode) {
   return words => ({
@@ -247,11 +247,14 @@ function decode(paymentRequest, network) {
     throw new Error('Lightning Payment Request must be string')
   if (paymentRequest.slice(0, 2).toLowerCase() !== 'ln')
     throw new Error('Not a proper lightning payment request')
+
+  const sections = []
   const decoded = bech32.decode(paymentRequest, Number.MAX_SAFE_INTEGER)
   paymentRequest = paymentRequest.toLowerCase()
   const prefix = decoded.prefix
   let words = decoded.words
-
+  let letters = paymentRequest.slice(prefix.length + 1)
+  let sigWords = words.slice(-104)
   words = words.slice(0, -104)
 
   // Without reverse lookups, can't say that the multipier at the end must
@@ -266,6 +269,13 @@ function decode(paymentRequest, network) {
     throw new Error('Not a proper lightning payment request')
   }
 
+  // "ln" section
+  sections.push({
+    name: 'lightning_network',
+    letters: 'ln'
+  })
+
+  // "bc" section
   const bech32Prefix = prefixMatches[1]
   let coinNetwork
   if (!network) {
@@ -296,27 +306,49 @@ function decode(paymentRequest, network) {
   if (!coinNetwork || coinNetwork.bech32 !== bech32Prefix) {
     throw new Error('Unknown coin bech32 prefix')
   }
+  sections.push({
+    name: 'coin_network',
+    letters: bech32Prefix,
+    value: coinNetwork
+  })
 
+  // amount section
   const value = prefixMatches[2]
   let millisatoshis
   if (value) {
     const divisor = prefixMatches[3]
     millisatoshis = hrpToMillisat(value + divisor, true)
+    sections.push({
+      name: 'amount',
+      letters: prefixMatches[2] + prefixMatches[3],
+      value: millisatoshis
+    })
   } else {
     millisatoshis = null
   }
 
-  // reminder: left padded 0 bits
+  // "1" separator
+  sections.push({
+    name: 'separator',
+    letters: '1'
+  })
+
+  // timestamp
   const timestamp = wordsToIntBE(words.slice(0, 7))
   words = words.slice(7) // trim off the left 7 words
+  sections.push({
+    name: 'timestamp',
+    letters: letters.slice(0, 7),
+    value: timestamp
+  })
+  letters = letters.slice(7)
 
-  const tags = {}
   let tagName, parser, tagLength, tagWords
   // we have no tag count to go on, so just keep hacking off words
   // until we have none.
   while (words.length > 0) {
     const tagCode = words[0].toString()
-    tagName = TAGNAMES[tagCode] || unknownTagName
+    tagName = TAGNAMES[tagCode] || 'unknown_tag'
     parser = TAGPARSERS[tagCode] || getUnknownParser(tagCode)
     words = words.slice(1)
 
@@ -326,33 +358,62 @@ function decode(paymentRequest, network) {
     tagWords = words.slice(0, tagLength)
     words = words.slice(tagLength)
 
-    // See: parsers for more comments
-    tags[tagName] = parser(tagWords)
+    sections.push({
+      name: tagName,
+      tag: letters[0],
+      letters: letters.slice(0, 1 + 2 + tagLength),
+      value: parser(tagWords) // see: parsers for more comments
+    })
+    letters = letters.slice(1 + 2 + tagLength)
   }
 
-  let timeExpireDate
-  // be kind and provide an absolute expiration date.
-  // good for logs
-  if (tags[TAGNAMES['6']]) {
-    timeExpireDate = timestamp + tags[TAGNAMES['6']]
-  }
+  // signature
+  sections.push({
+    name: 'signature',
+    letters: letters.slice(0, 104),
+    value: wordsToBuffer(sigWords, true).toString('hex')
+  })
+  letters = letters.slice(104)
 
-  let finalResult = {
+  // checksum
+  sections.push({
+    name: 'checksum',
+    letters: letters
+  })
+
+  let result = {
     paymentRequest,
-    prefix,
-    network: coinNetwork,
-    millisatoshis,
-    timestamp,
-    ...tags
+    sections,
+
+    get expiry() {
+      let exp = sections.find(s => s.name === 'expiry')
+      if (exp) return getValue('timestamp') + exp.value
+    },
+
+    get route_hints() {
+      return sections.filter(s => s.name === 'route_hint').map(s => s.value)
+    }
   }
 
-  if (timeExpireDate) {
-    finalResult = Object.assign(finalResult, {
-      timeExpireDate
+  for (let name in TAGCODES) {
+    if (name === 'route_hint') {
+      // route hints can be multiple, so this won't work for them
+      continue
+    }
+
+    Object.defineProperty(result, name, {
+      get() {
+        return getValue(name)
+      }
     })
   }
 
-  return finalResult
+  return result
+
+  function getValue(name) {
+    let section = sections.find(s => s.name === name)
+    return section ? section.value : undefined
+  }
 }
 
 module.exports = {
