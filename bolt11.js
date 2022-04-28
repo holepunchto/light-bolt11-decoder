@@ -1,5 +1,5 @@
 const bech32 = require('bech32')
-const Buffer = require('safe-buffer').Buffer
+const Buffer = require('buffer').Buffer
 const BN = require('bn.js')
 
 // defaults for encode; default timestamp is current time at call
