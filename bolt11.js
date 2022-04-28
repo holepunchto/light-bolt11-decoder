@@ -76,12 +76,12 @@ for (let i = 0, keys = Object.keys(TAGCODES); i < keys.length; i++) {
 }
 
 const TAGPARSERS = {
-  1: words => wordsToBuffer(words, true).toString('hex'), // 256 bits
-  16: words => wordsToBuffer(words, true).toString('hex'), // 256 bits
+  1: words => wordsToBuffer(words, true), // 256 bits
+  16: words => wordsToBuffer(words, true), // 256 bits
   13: words => wordsToBuffer(words, true).toString('utf8'), // string variable length
-  19: words => wordsToBuffer(words, true).toString('hex'), // 264 bits
-  23: words => wordsToBuffer(words, true).toString('hex'), // 256 bits
-  27: words => wordsToBuffer(words, true).toString('hex'), // variable
+  19: words => wordsToBuffer(words, true), // 264 bits
+  23: words => wordsToBuffer(words, true), // 256 bits
+  27: words => wordsToBuffer(words, true), // variable
   6: wordsToIntBE, // default: 3600 (1 hour)
   24: wordsToIntBE, // default: 9
   3: routingInfoParser, // for extra routing info (private etc.)
@@ -369,7 +369,7 @@ function decode(paymentRequest, network) {
   sections.push({
     name: 'signature',
     letters: letters.slice(0, 104),
-    value: wordsToBuffer(sigWords, true).toString('hex')
+    value: wordsToBuffer(sigWords, true)
   })
   letters = letters.slice(104)
 
