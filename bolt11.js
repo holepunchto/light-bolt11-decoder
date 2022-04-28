@@ -180,33 +180,31 @@ function featureBitsParser(words) {
   while (bools.length < FEATUREBIT_ORDER.length * 2) {
     bools.push(false)
   }
-  const featureBits = {
-    word_length: words.length
-  }
+  const featureBits = {}
+
   FEATUREBIT_ORDER.forEach((featureName, index) => {
-    featureBits[featureName] = {
-      required: bools[index * 2],
-      supported: bools[index * 2 + 1]
+    let status
+    if (bools[index * 2]) {
+      status = 'required'
+    } else if (bools[index * 2 + 1]) {
+      status = 'supported'
     }
+    featureBits[featureName] = status
   })
+
   if (bools.length > FEATUREBIT_ORDER.length * 2) {
     const extraBits = bools.slice(FEATUREBIT_ORDER.length * 2)
     featureBits.extra_bits = {
       start_bit: FEATUREBIT_ORDER.length * 2,
       bits: extraBits,
-      has_required: extraBits.reduce(
+      required: extraBits.reduce(
         (result, bit, index) =>
           index % 2 !== 0 ? result || false : result || bit,
         false
       )
     }
-  } else {
-    featureBits.extra_bits = {
-      start_bit: FEATUREBIT_ORDER.length * 2,
-      bits: [],
-      has_required: false
-    }
   }
+
   return featureBits
 }
 
