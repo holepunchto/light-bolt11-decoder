@@ -3,6 +3,7 @@
   "version": "2.1.0",
   "description": "",
   "main": "bolt11.js",
+  "files": ["*.js"],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/fiatjaf/light-bolt11-decoder.git"
