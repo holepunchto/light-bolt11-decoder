@@ -10,7 +10,7 @@ Code derived from [bolt11](https://npmjs.com/package/bolt11), which has the full
 ## Installation
 
 ```
-yarn add light-bolt11-decoder
+yarn add @holepunchto/light-bolt11-decoder
 ```
 
 ## Example Output from `require('light-bolt11-decoder').decode("lnbc...")`

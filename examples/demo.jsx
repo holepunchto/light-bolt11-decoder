@@ -1,4 +1,4 @@
-import {decode} from 'light-bolt11-decoder'
+import {decode} from '@holepunchto/light-bolt11-decoder'
 import React, {useState} from 'react'
 import {render} from 'react-dom'
 import useComputedState from 'use-computed-state'

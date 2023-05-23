@@ -1,5 +1,5 @@
 {
-  "name": "@holepunch/light-bolt11-decoder",
+  "name": "@holepunchto/light-bolt11-decoder",
   "version": "2.1.1",
   "description": "",
   "main": "bolt11.js",
